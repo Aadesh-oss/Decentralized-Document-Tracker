@@ -9,8 +9,7 @@ TrustNet is a lightweight blockchain-based system for recording and verifying do
 - Consensus (longest valid chain)
 - Web UI for upload, verification, and chain viewing
 
-## Screenshot
-![TrustNet UI](assets/ui-screenshot.svg)
+
 
 ## Architecture
 ```mermaid
