@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TrustNet File Verifier</title>
+<style>
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: linear-gradient(135deg, #f5f7fa, #e3ecf0);
+    color: #333;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+  }
+  h2 { margin-bottom: 5px; color: #222; }
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px 30px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    margin: 20px 0;
+    width: 100%;
+    max-width: 600px;
+  }
+  form { display: flex; flex-direction: column; gap: 10px; }
+  input[type=file], input[type=text] {
+    padding: 6px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+  }
+  button {
+    background: #0078ff;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 10px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: 0.3s;
+  }
+  button:hover { background: #005fcc; }
+  .progress {
+    width: 100%;
+    background: #ddd;
+    border-radius: 8px;
+    overflow: hidden;
+    height: 10px;
+    margin-top: 15px;
+  }
+  .progress-bar {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, #0078ff, #00c6ff);
+    transition: width 0.3s ease;
+  }
+  .mine-panel {
+    margin-top: 20px;
+    text-align: center;
+  }
+  #orecount {
+    font-size: 1.6em;
+    font-weight: bold;
+    color: #0078ff;
+  }
+  .auto-btn { background: #00b86b; }
+  .stop-btn { background: #c0392b; }
+
+  /* Popup styles */
+  .popup {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.4);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  .popup-content {
+    background: white;
+    padding: 30px 40px;
+    border-radius: 14px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+    text-align: center;
+    max-width: 320px;
+    animation: fadeIn 0.3s ease;
+  }
+  .popup-content h3 {
+    margin-top: 0;
+  }
+  .success { color: #00b86b; }
+  .error { color: #c0392b; }
+  .close-btn {
+    margin-top: 15px;
+    background: #0078ff;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 20px;
+    cursor: pointer;
+  }
+  @keyframes fadeIn {
+    from { transform: scale(0.9); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+
+  /* Blockchain Viewer */
+  .block {
+    background: #fff;
+    border-left: 5px solid #0078ff;
+    border-radius: 10px;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+    margin-bottom: 10px;
+    padding: 10px 15px;
+    font-size: 14px;
+    transition: box-shadow 0.3s ease, transform 0.3s ease;
+  }
+  .block.new {
+    box-shadow: 0 0 12px #00b86b;
+    transform: scale(1.02);
+  }
+</style>
+</head>
+<body>
+  <h2>TrustNet: Blockchain File Verifier</h2>
+
+  <div class="card">
+    <h3>Upload & Record File</h3>
+    <form id="uploadForm">
+      <input type="file" name="file" required>
+      <input type="text" name="candidate" placeholder="Candidate name">
+      <input type="text" name="verified_by" value="TrustNet">
+      <input type="text" name="note" placeholder="Note (optional)">
+      <button type="submit">Upload & Record</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>Verify File</h3>
+    <form id="verifyForm">
+      <input type="file" name="file" required>
+      <button type="submit">Verify</button>
+    </form>
+    <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+    <div id="verifyDetails" style="margin-top:12px; font-size:14px; color:#444;"></div>
+    <button id="downloadReportBtn" style="margin-top:12px; background:#00b86b;" disabled>Download Report</button>
+  </div>
+
+  <div class="card mine-panel">
+    <h3>OreCoin Miner</h3>
+    <div id="orecount">0 OreCoins</div>
+    <button id="autoBtn" class="auto-btn">Start Automine</button>
+  </div>
+
+  <div class="card">
+    <h3>Blockchain Explorer</h3>
+    <div style="display:flex; gap:10px;">
+      <button id="viewChainBtn">View Chain</button>
+      <button id="refreshChainBtn" style="background:#00b86b;">Refresh Chain</button>
+    </div>
+    <div id="chainMeta" style="margin-top:10px; font-size:14px; color:#555;"></div>
+    <div id="chainContainer" style="
+      max-height:300px;
+      overflow-y:auto;
+      margin-top:15px;
+      padding:10px;
+      background:#f4f4f4;
+      border-radius:10px;
+      display:none;">
+    </div>
+  </div>
+
+  <!-- Popup Modal -->
+  <div id="popup" class="popup">
+    <div class="popup-content">
+      <h3 id="popupMsg"></h3>
+      <button class="close-btn" id="closePopup">Close</button>
+    </div>
+  </div>
+
+  <script>
+    // --- Popup helpers ---
+    function showPopup(message, type="success") {
+      const popup = document.getElementById('popup');
+      const popupMsg = document.getElementById('popupMsg');
+      popupMsg.textContent = message;
+      popupMsg.className = type;
+      popup.style.display = 'flex';
+    }
+    function hidePopup() {
+      document.getElementById('popup').style.display = 'none';
+    }
+    document.getElementById('closePopup').addEventListener('click', hidePopup);
+
+    // --- Progress helper ---
+    function animateProgressTo(progressEl, ms=2000) {
+      progressEl.style.width = '0%';
+      const start = performance.now();
+      function tick(now) {
+        const t = Math.min((now - start) / ms, 1);
+        progressEl.style.width = Math.round(t * 100) + '%';
+        if (t < 1) requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    }
+
+    // --- Verdict detection ---
+    function extractVerdict(data) {
+      if (!data || typeof data !== 'object') return null;
+      if (typeof data.verified === 'boolean') return data.verified;
+      if (typeof data.match === 'boolean') return data.match;
+      if (typeof data.is_valid === 'boolean') return data.is_valid;
+      const fields = ['status', 'result', 'message', 'detail'];
+      for (const f of fields) {
+        if (data[f]) {
+          const s = String(data[f]).toLowerCase();
+          if (s.includes('tamper') || s.includes('mismatch') || s.includes('invalid') || s.includes('not'))
+            return false;
+          if (s.includes('verify') || s.includes('valid') || s.includes('match') || s.includes('original'))
+            return true;
+        }
+      }
+      return null;
+    }
+
+    // --- File upload / verify ---
+    async function postForm(url, form, mode) {
+      const progress = document.getElementById('progressBar');
+      animateProgressTo(progress, 1800);
+      let res, data = null;
+      try {
+        res = await fetch(url, { method: 'POST', body: new FormData(form) });
+      } catch {
+        showPopup('Network error. Please try again.', 'error');
+        return;
+      }
+
+      try { data = await res.json(); } catch { data = null; }
+
+      if (mode === 'upload') {
+        if (res.ok) {
+          showPopup('Document uploaded successfully.', 'success');
+          refreshChain(true);
+        } else showPopup('Upload failed.', 'error');
+        return;
+      }
+
+      if (mode === 'verify') {
+        const verdict = extractVerdict(data);
+        const details = document.getElementById('verifyDetails');
+        const downloadBtn = document.getElementById('downloadReportBtn');
+        if (data && typeof data === 'object') {
+          const lines = [];
+          if (data.filename) lines.push(`Filename: ${data.filename}`);
+          if (data.file_hash) lines.push(`Hash: ${data.file_hash}`);
+          if (data.block_index) lines.push(`Block: #${data.block_index}`);
+          if (data.message) lines.push(data.message);
+          details.textContent = lines.join(' • ');
+          window.__lastVerifyReport = {
+            ...data,
+            verified_at: new Date().toISOString()
+          };
+          downloadBtn.disabled = false;
+        } else {
+          details.textContent = '';
+          window.__lastVerifyReport = null;
+          downloadBtn.disabled = true;
+        }
+
+        if (verdict === true)
+          showPopup('Original document.', 'success');
+        else if (verdict === false)
+          showPopup('Tampered document.', 'error');
+        else
+          showPopup('Verification completed (unrecognized format).', 'success');
+      }
+    }
+
+    // --- Forms ---
+    const uploadForm = document.getElementById('uploadForm');
+    const verifyForm = document.getElementById('verifyForm');
+    uploadForm.addEventListener('submit', e => { e.preventDefault(); postForm('/file/upload', uploadForm, 'upload'); });
+    verifyForm.addEventListener('submit', e => { e.preventDefault(); postForm('/file/verify', verifyForm, 'verify'); });
+
+    // --- Automine simulation ---
+    let mining = false, oreCount = 0, interval;
+    const oreDisplay = document.getElementById('orecount');
+    const autoBtn = document.getElementById('autoBtn');
+    autoBtn.addEventListener('click', () => {
+      if (!mining) {
+        mining = true;
+        autoBtn.textContent = 'Stop Automine';
+        autoBtn.classList.remove('auto-btn');
+        autoBtn.classList.add('stop-btn');
+        interval = setInterval(() => {
+          oreCount += Math.floor(Math.random() * 3);
+          oreDisplay.textContent = oreCount + ' OreCoins';
+        }, 700);
+      } else {
+        mining = false;
+        autoBtn.textContent = 'Start Automine';
+        autoBtn.classList.remove('stop-btn');
+        autoBtn.classList.add('auto-btn');
+        clearInterval(interval);
+      }
+    });
+
+    // --- Blockchain viewer ---
+    const chainContainer = document.getElementById('chainContainer');
+    const viewChainBtn = document.getElementById('viewChainBtn');
+    const refreshChainBtn = document.getElementById('refreshChainBtn');
+    let latestBlockCount = 0;
+
+    // --- Download verification report ---
+    const downloadReportBtn = document.getElementById('downloadReportBtn');
+    downloadReportBtn.addEventListener('click', () => {
+      const report = window.__lastVerifyReport;
+      if (!report) {
+        showPopup('Run a verification first.', 'error');
+        return;
+      }
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'verification-report.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    });
+
+    async function refreshChain(highlightNew=false) {
+      try {
+        const res = await fetch('/chain');
+        const rawData = await res.json();
+        let chain = Array.isArray(rawData) ? rawData : rawData.chain;
+        if (!Array.isArray(chain)) {
+          chainContainer.innerHTML = '<p style="color:red;">Invalid blockchain data format.</p>';
+          return;
+        }
+
+        chainContainer.innerHTML = '';
+        chain.forEach((block, idx) => {
+          const div = document.createElement('div');
+          div.className = 'block';
+          if (highlightNew && idx >= latestBlockCount) div.classList.add('new');
+          div.innerHTML = `
+            <strong>Block #${block.index ?? idx}</strong><br>
+            Hash: ${block.hash ?? 'N/A'}<br>
+            Prev: ${block.previous_hash ?? 'N/A'}<br>
+            Timestamp: ${block.timestamp ? new Date(block.timestamp * 1000).toLocaleString() : 'N/A'}
+          `;
+          chainContainer.appendChild(div);
+        });
+
+        latestBlockCount = chain.length;
+        const meta = document.getElementById('chainMeta');
+        meta.textContent = `Blocks: ${chain.length} • Last refresh: ${new Date().toLocaleTimeString()}`;
+
+        // Soft fade-out highlight
+        setTimeout(() => {
+          document.querySelectorAll('.block.new').forEach(el => el.classList.remove('new'));
+        }, 2000);
+      } catch (err) {
+        chainContainer.innerHTML = '<p style="color:red;">Error loading blockchain data.</p>';
+      }
+    }
+
+    viewChainBtn.addEventListener('click', () => {
+      if (chainContainer.style.display === 'none') {
+        chainContainer.style.display = 'block';
+        viewChainBtn.textContent = 'Hide Chain';
+        refreshChain();
+      } else {
+        chainContainer.style.display = 'none';
+        viewChainBtn.textContent = 'View Chain';
+      }
+    });
+
+    refreshChainBtn.addEventListener('click', () => {
+      if (chainContainer.style.display === 'block') {
+        refreshChain(true);
+      } else {
+        showPopup('Open the chain viewer first to refresh.', 'error');
+      }
+    });
+
+    // Auto-refresh every 10 seconds if visible
+    setInterval(() => {
+      if (chainContainer.style.display === 'block') refreshChain();
+    }, 10000);
+  </script>
+</body>
+</html>

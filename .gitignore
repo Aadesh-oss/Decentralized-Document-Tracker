@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.env
+.venv
+venv/
+
+# Local data and uploads
+/data/chain.json
+/uploads/
+
+# Local virtual env used in this repo
+/.block/
+
+# OS files
+.DS_Store
+
+# Logs
+*.log
